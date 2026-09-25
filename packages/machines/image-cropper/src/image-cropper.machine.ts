@@ -14,6 +14,7 @@ import {
   computeKeyboardCrop,
   computeMoveCrop,
   computeResizeCrop,
+  constrainCrop,
   getCenterPoint,
   getCropSizeLimits,
   getKeyboardMoveDelta,
@@ -24,6 +25,7 @@ import {
   getViewportCenter,
   isAspectRatioEqual,
   isEqualFlip,
+  isEqualRect,
   isSameSize,
   isVisibleRect,
   MIN_PINCH_DISTANCE,
@@ -148,6 +150,10 @@ export const machine = createMachine<ImageCropperSchema>({
     RESIZE_CROP: {
       guard: "canResizeCrop",
       actions: ["resizeCrop"],
+    },
+    SET_CROP: {
+      guard: "canResizeCrop",
+      actions: ["setCrop"],
     },
     VIEWPORT_RESIZE: {
       actions: ["resizeViewport"],
@@ -316,19 +322,7 @@ export const machine = createMachine<ImageCropperSchema>({
 
         const initialCrop = prop("initialCrop")
         if (initialCrop) {
-          const constrainedSize = clampSize({
-            x: 0,
-            y: 0,
-            width: initialCrop.width,
-            height: initialCrop.height,
-          })
-
-          const { width, height } = constrainedSize
-
-          const max = getMaxBounds({ width, height }, viewportRect)
-          const { x, y } = clampPoint(initialCrop, ZERO_POINT, max)
-
-          context.set("crop", { x, y, width, height })
+          context.set("crop", constrainCrop({ crop: initialCrop, viewportRect, minSize, maxSize, aspectRatio }))
           return
         }
 
@@ -502,6 +496,17 @@ export const machine = createMachine<ImageCropperSchema>({
           maxSize,
           aspectRatio,
         })
+
+        context.set("crop", nextCrop)
+      },
+
+      setCrop({ context, event, prop }) {
+        const viewportRect = context.get("viewportRect")
+        const aspectRatio = resolveCropAspectRatio(prop("cropShape"), prop("aspectRatio"))
+        const { minSize, maxSize } = getCropSizeLimits(prop)
+
+        const nextCrop = constrainCrop({ crop: event.crop, viewportRect, minSize, maxSize, aspectRatio })
+        if (isEqualRect(nextCrop, context.get("crop"))) return
 
         context.set("crop", nextCrop)
       },
